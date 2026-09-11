@@ -26,6 +26,9 @@ Execute any problem through the automated test judge in seconds:
 # Problem 01: Vector Addition
 leetgpu-run ./build/problems/01_vector_add/vector_add
 
+# Problem 02: Matrix Transpose
+leetgpu-run ./build/problems/02_matrix_transpose/matrix_transpose
+
 # Device inspector
 leetgpu-run ./build/device_info
 ```
@@ -83,10 +86,10 @@ Our code runs on Leonardo's custom SXM4 supercomputing partition:
 ## 🗺️ Problem Curriculum & Progress
 
 | # | Problem | Focus / Optimization Concepts | Status | Best A100 Performance |
-| :-: | :--- | :--- | :-: | :--- |
+| :-: | :--- | :--- | :--- | :--- |
 | **01** | [**Vector Addition**](problems/01_vector_add/) | 1D indexing, Grid-stride loop, `float4` vectorized loads | ✅ **Completed** | **1,395 GB/s** (89.7% HBM2e Peak) |
-| **02** | **Matrix Transpose** | Coalesced writes, Shared Memory tiling, Bank Conflict padding | ⏳ Next | — |
-| **03** | **Parallel Reduction** | Warp divergence, Interleaved vs Sequential addressing, Warp shuffles (`__shfl_down_sync`) | ⏳ Upcoming | — |
+| **02** | [**Matrix Transpose**](problems/02_matrix_transpose/) | Coalesced writes, Shared Memory tiling, Bank Conflict padding | ✅ **Completed** | **1,187 GB/s** (76.3% HBM2e Peak) |
+| **03** | **Parallel Reduction** | Warp divergence, Interleaved vs Sequential addressing, Warp shuffles (`__shfl_down_sync`) | ⏳ Next | — |
 | **04** | **Prefix Sum (Scan)** | Work-efficiency, Hillis-Steele vs Blelloch, Bank conflicts | ⏳ Upcoming | — |
 | **05** | **1D/2D Stencil & Conv** | Constant memory, Halo cell caching, Shared memory apron | ⏳ Upcoming | — |
 | **06** | **SGEMM (Matrix Mult)** | Naive $\to$ Shared Memory Tiling $\to$ 2D Register Tiling $\to$ Tensor Cores (`wmma`) | ⏳ Upcoming | — |
