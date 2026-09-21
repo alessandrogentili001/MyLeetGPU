@@ -1,6 +1,7 @@
 #include "kernel.cuh"
 #include <cfloat>
 #include <cmath>
+#include <cstdint>
 
 // ==============================================================================
 // MILESTONE 1: Two-Pass Safe Softmax (Shared Memory Block Reduction)
@@ -23,6 +24,51 @@ __global__ void softmax_block_twopass_kernel(const float* in, float* out, int m,
     //    then reduce in s_sum.
     // 5. Broadcast row_max and row_sum, compute inv_sum = 1.0f / row_sum.
     // 6. Write out[row * n + col] = expf(in[row * n + col] - row_max) * inv_sum.
+
+    int row = blockIdx.x;
+    if (row>=m) return;
+
+    __shared__ float s_max[SOFTMAX_BLOCK_SIZE];
+    __shared__ float s_sum[SOFTMAX_BLOCK_SIZE];
+
+    int col_stride = blockDim.x;
+    int tid = threadIdx.x;
+    //int lane = tid%32;
+    //int warp = tid/32;
+
+    // First Pass: MAX reduction
+    float thread_max = -1e20;
+    for (int i = tid; i < n; i += col_stride) {
+        thread_max = fmaxf(thread_max, in[row*n+i]);
+    }
+    s_max[tid] = thread_max;
+    __syncthreads();
+
+    for (int stride = col_stride/2; stride > 0; stride >>= 1) {
+        s_max[tid] = fmaxf(s_max[tid], s_max[tid+stride]);
+        __syncthreads();
+    }
+    float block_max = s_max[0];
+
+    // Second Pass: SUM reduction
+    float thread_sum = 0.0f;
+    for (int i = tid; i<n; i+= col_stride) {
+        thread_sum += expf(in[row*n+i]-block_max);
+    }
+    s_sum[tid] = thread_sum;
+    __syncthreads();
+
+    for (int stride = col_stride/2; stride > 0; stride>>=1) {
+        s_sum[tid] += s_sum[tid+stride];
+        __syncthreads();
+    }
+    float block_sum = s_sum[0];
+    float inv_sum = 1.0f/block_sum;
+
+    // Third Pass: WRITE normalized output
+    for (int i = tid; i<n; i+= col_stride) {
+        out[row*n+i] = expf(in[row*n+i]-block_max)*inv_sum;
+    }
 }
 
 void launch_softmax_block_twopass(const float* d_in, float* d_out, int m, int n) {
@@ -32,7 +78,7 @@ void launch_softmax_block_twopass(const float* d_in, float* d_out, int m, int n)
 }
 
 bool is_block_twopass_implemented() {
-    return false; // Change to true once implemented!
+    return true; // Change to true once implemented!
 }
 
 
@@ -76,6 +122,55 @@ __global__ void softmax_warp_shuffle_kernel(const float* in, float* out, int m, 
     // 4. Synchronize, then threadIdx.x < num_warps performs final reduction with Warp 0.
     // 5. Repeat the reduction for the sum of exponentials using warp_reduce_sum().
     // 6. Write normalized outputs to out[row * n + col].
+
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+    int col_stride = blockDim.x;
+    int lane = tid % 32;
+    int warp = tid / 32;
+    int num_warps = blockDim.x/32;
+
+    __shared__ float s_max[32];
+    __shared__ float s_sum[32];
+
+    float thread_max = -1e20;
+    for (int i = tid; i < n; i+= col_stride) {
+        thread_max = fmaxf(thread_max, in[row*n+i]);
+    }
+    thread_max = warp_reduce_max(thread_max);
+
+    if (lane == 0) s_max[warp] = thread_max;
+    __syncthreads();
+
+    if (warp == 0) {
+        float val = (lane < num_warps) ? s_max[lane] : -INFINITY;
+        val = warp_reduce_max(val);
+        if (lane == 0) s_max[0] = val;
+    }
+    __syncthreads();
+    float block_max = s_max[0]; 
+
+    float thread_sum = 0;
+    for (int i = tid; i < n; i+= col_stride) {
+        thread_sum += expf(in[row*n+i]-block_max);
+    }
+    thread_sum = warp_reduce_sum(thread_sum);
+
+    if (lane == 0) s_sum[warp] = thread_sum;
+    __syncthreads();
+
+    if (warp == 0) {
+        float val = (lane < num_warps) ? s_sum[lane] : 0;
+        val = warp_reduce_sum(val);
+        if (lane == 0) s_sum[0] = val;
+    }
+    __syncthreads();
+    float block_sum = s_sum[0]; 
+
+    float inv_sum = 1.0f/block_sum;
+    for (int i = tid; i < n; i+= col_stride) {
+        out[row*n+i] = expf(in[row*n+i]-block_max)*inv_sum;
+    }
 }
 
 void launch_softmax_warp_shuffle(const float* d_in, float* d_out, int m, int n) {
@@ -85,7 +180,7 @@ void launch_softmax_warp_shuffle(const float* d_in, float* d_out, int m, int n) 
 }
 
 bool is_warp_shuffle_implemented() {
-    return false; // Change to true once implemented!
+    return true; // Change to true once implemented!
 }
 
 
@@ -113,6 +208,16 @@ __device__ __forceinline__ void combine_online_stats(float& m1, float& d1, float
     }
 }
 
+// Helper: Update running online stats with a single scalar element
+__device__ __forceinline__ void update_online_val(float& m, float& d, float x) {
+    if (x > m) {
+        d = d * __expf(m - x) + 1.0f;
+        m = x;
+    } else {
+        d += __expf(x - m);
+    }
+}
+
 __global__ void softmax_online_kernel(const float* in, float* out, int m, int n) {
     // TODO: Implement Milestone 3:
     // 1. Maintain running (thread_m, thread_d) initialized to (-INFINITY, 0.0f).
@@ -125,6 +230,93 @@ __global__ void softmax_online_kernel(const float* in, float* out, int m, int n)
     //      Use combine_online_stats() inside warp reductions!
     // 5. Broadcast global (row_m, row_d) to all threads in block.
     // 6. Loop over columns once more to write out the normalized values y = exp(x - row_m) / row_d.
+
+    __shared__ float s_m[32];
+    __shared__ float s_d[32];
+
+    int row = blockIdx.x;
+    if (row >= m) return;
+
+    int tid = threadIdx.x;
+    int col_stride = blockDim.x;
+    int lane = tid % 32;
+    int warp = tid / 32;
+    int num_warps = blockDim.x / 32;
+
+    const float* row_in = in + static_cast<size_t>(row) * n;
+    float* row_out = out + static_cast<size_t>(row) * n;
+
+    float thread_m = -1e20f;
+    float thread_d = 0.0f;
+
+    // Check if row addresses are 16-byte aligned for float4 vectorization
+    bool is_aligned = (reinterpret_cast<uintptr_t>(row_in) % sizeof(float4) == 0) &&
+                      (reinterpret_cast<uintptr_t>(row_out) % sizeof(float4) == 0);
+
+    // Pass 1: Online stats reduction (using float4 when aligned)
+    if (is_aligned) {
+        int n4 = n / 4;
+        const float4* in4 = reinterpret_cast<const float4*>(row_in);
+        for (int i = tid; i < n4; i += col_stride) {
+            float4 v = in4[i];
+            float local_max = fmaxf(fmaxf(v.x, v.y), fmaxf(v.z, v.w));
+            float local_d = __expf(v.x - local_max) + __expf(v.y - local_max) +
+                            __expf(v.z - local_max) + __expf(v.w - local_max);
+            combine_online_stats(thread_m, thread_d, local_max, local_d);
+        }
+        for (int i = n4 * 4 + tid; i < n; i += col_stride) {
+            update_online_val(thread_m, thread_d, row_in[i]);
+        }
+    } else {
+        for (int i = tid; i < n; i += col_stride) {
+            update_online_val(thread_m, thread_d, row_in[i]);
+        }
+    }
+
+    #pragma unroll
+    for (int offset = 16; offset > 0; offset /= 2) {
+        float m2 = __shfl_down_sync(0xffffffff, thread_m, offset);
+        float d2 = __shfl_down_sync(0xffffffff, thread_d, offset);
+        combine_online_stats(thread_m, thread_d, m2, d2);
+    }
+
+    if (lane == 0) s_m[warp] = thread_m;
+    if (lane == 0) s_d[warp] = thread_d;
+    __syncthreads();
+
+    if (tid == 0) {
+        for (int i = 1; i < num_warps; i++) {
+            combine_online_stats(s_m[0], s_d[0], s_m[i], s_d[i]);
+        }
+    }
+    __syncthreads();
+    
+    float row_m = s_m[0];
+    float row_d = s_d[0];
+    float inv_d = 1.0f / row_d;
+
+    // Pass 2: Write normalized outputs (using float4 when aligned)
+    if (is_aligned) {
+        int n4 = n / 4;
+        const float4* in4 = reinterpret_cast<const float4*>(row_in);
+        float4* out4 = reinterpret_cast<float4*>(row_out);
+        for (int i = tid; i < n4; i += col_stride) {
+            float4 v = in4[i];
+            float4 res;
+            res.x = __expf(v.x - row_m) * inv_d;
+            res.y = __expf(v.y - row_m) * inv_d;
+            res.z = __expf(v.z - row_m) * inv_d;
+            res.w = __expf(v.w - row_m) * inv_d;
+            out4[i] = res;
+        }
+        for (int i = n4 * 4 + tid; i < n; i += col_stride) {
+            row_out[i] = __expf(row_in[i] - row_m) * inv_d;
+        }
+    } else {
+        for (int i = tid; i < n; i += col_stride) {
+            row_out[i] = __expf(row_in[i] - row_m) * inv_d;
+        }
+    }
 }
 
 void launch_softmax_online(const float* d_in, float* d_out, int m, int n) {
@@ -134,5 +326,5 @@ void launch_softmax_online(const float* d_in, float* d_out, int m, int n) {
 }
 
 bool is_online_implemented() {
-    return false; // Change to true once implemented!
+    return true; // Change to true once implemented!
 }

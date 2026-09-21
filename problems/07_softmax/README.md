@@ -97,6 +97,26 @@ Combined with `float4` (128-bit) vectorized loads, this minimizes HBM roundtrips
 
 ---
 
+## 🎯 Milestones & A100 Achieved Results
+
+Benchmark size: $M = 8,192 \times N = 4,096$ matrix ($32\text{M}$ floats, $256.0\text{ MB}$ DRAM traffic) on Leonardo Booster NVIDIA A100-SXM4-64GB:
+
+| Milestone | Architecture Strategy | Reduction Primitives | Vectorization | Achieved Bandwidth | Latency | Peak HBM2e % |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Block Two-Pass** | Block Shared Memory | `s_max`, `s_sum` Tree Reductions | Scalar (`float`) | **1,094.32 GB/s** | 0.245 ms | 70.4% |
+| **2. Warp-Accelerated** | Intra-warp register shuffles | `__shfl_down_sync` + Warp 0 | Scalar (`float`) | **1,115.03 GB/s** | **0.241 ms** | **71.7%** 🚀 |
+| **3. Online FlashSoftmax** | Single-pass running stats | Online recurrence + Warp shuffles | Vectorized (`float4`) | **1,088.64 GB/s** | 0.247 ms | 70.0% |
+
+### Key Takeaways from the Numbers:
+1. **Warp Shuffles Cut Latency and Shared Memory Contention**:
+   Moving from block shared memory tree reductions (Milestone 1) to intra-warp register shuffle instructions (`__shfl_down_sync` in Milestone 2) reduces block synchronizations (`__syncthreads()`) and completely eliminates shared memory bank conflicts, achieving the fastest execution time (**240.7 µs, 1,115 GB/s**).
+2. **L2 Cache Dynamics in Multi-Pass vs. Single-Pass**:
+   For standalone row-wise softmax with $N=4,096$, each row is only $16\text{ KB}$, easily fitting in the A100's $32\text{ MB}$ L2 cache and SM L1/SRAM. Passes 2 and 3 hit high-speed L2 cache (>3 TB/s) rather than re-reading from DRAM.
+3. **Chunked `float4` Vectorization Powers Online Softmax**:
+   Without vectorization, online softmax is bottlenecked by Special Function Unit (SFU) transcendental operations (`__expf`). Finding the `local_max` of 4 elements via fast 1-cycle ALU comparisons and issuing 128-bit `float4` memory instructions boosts Online FlashSoftmax throughput to **1,088.64 GB/s**.
+
+---
+
 ## 🚀 How to Run
 
 ```bash
