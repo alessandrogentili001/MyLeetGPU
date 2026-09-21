@@ -93,6 +93,6 @@ Our code runs on Leonardo's custom SXM4 supercomputing partition:
 | **04** | [**Prefix Sum (Scan)**](problems/04_prefix_sum/) | Work-efficiency, Hillis-Steele vs Blelloch, Bank conflicts | 📝 Prepared | — |
 | **05** | **1D/2D Stencil & Conv** | Constant memory, Halo cell caching, Shared memory apron | ⏳ Upcoming | — |
 | **06** | **SGEMM (Matrix Mult)** | Naive $\to$ Shared Memory Tiling $\to$ 2D Register Tiling $\to$ Tensor Cores (`wmma`) | ⏳ Upcoming | — |
-| **07** | **Softmax** | Two-pass vs Online Safe Softmax (FlashSoftmax), Warp reductions | ⏳ Upcoming | — |
+| **07** | [**Softmax**](problems/07_softmax/) | Two-pass vs Online Safe Softmax (FlashSoftmax), Warp reductions | 📝 Prepared | — |
 | **08** | **LayerNorm / RMSNorm** | Welford's algorithm, Fused elementwise operations | ⏳ Upcoming | — |
 | **09** | **FlashAttention-2** | Tiling Q, K, V in SRAM, causal masking, online softmax rescaling | ⏳ Upcoming | — |
