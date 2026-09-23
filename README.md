@@ -91,7 +91,7 @@ Our code runs on Leonardo's custom SXM4 supercomputing partition:
 | **02** | [**Matrix Transpose**](problems/02_matrix_transpose/) | Coalesced writes, Shared Memory tiling, Bank Conflict padding | ✅ **Completed** | **1,187 GB/s** (76.3% HBM2e Peak) |
 | **03** | [**Parallel Reduction**](problems/03_parallel_reduction/) | Warp divergence, Interleaved vs Sequential addressing, Warp shuffles (`__shfl_down_sync`) | ✅ **Completed** | **796 GB/s** (51.2% HBM2e Peak) |
 | **04** | [**Prefix Sum (Scan)**](problems/04_prefix_sum/) | Work-efficiency, Hillis-Steele vs Blelloch, Bank conflicts | ✅ **Completed** | **496.3 GB/s** (31.9% HBM2e Peak) |
-| **05** | [**2D Stencil & Conv**](problems/05_stencil_conv/) | Constant memory, Halo cell caching, Shared memory apron | ⏳ In Progress | — |
+| **05** | [**2D Stencil & Conv**](problems/05_stencil_conv/) | Constant memory, Halo cell caching, Shared memory apron | ✅ **Completed** | **667.8 GB/s** (42.9% HBM2e Peak) |
 | **06** | **SGEMM (Matrix Mult)** | Naive $\to$ Shared Memory Tiling $\to$ 2D Register Tiling $\to$ Tensor Cores (`wmma`) | ⏳ Upcoming | — |
 | **07** | [**Softmax**](problems/07_softmax/) | Two-pass vs Online Safe Softmax (FlashSoftmax), Warp reductions | ✅ **Completed** | **1,115 GB/s** (71.7% HBM2e Peak) |
 | **08** | **LayerNorm / RMSNorm** | Welford's algorithm, Fused elementwise operations | ⏳ Upcoming | — |

@@ -136,10 +136,10 @@ Benchmark size: $H = 8,192 \times W = 8,192$ matrix ($64\text{M}$ pixels, $512.0
 
 | Milestone | Memory Strategy | Mask Storage | Latency | Achieved Bandwidth | Compute Throughput | Peak HBM2e % |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
-| **1. Naive Global** (Baseline) | Direct DRAM reads | Global pointer | 1.193 ms | 449.94 GB/s | 2.812 TFLOPS | 28.9% |
-| **2. Constant Mask** | Direct DRAM reads | `__constant__` cache | ⏳ Pending | — | — | — |
-| **3. Shared Apron** | Cooperative `__shared__` tile | `__constant__` cache | ⏳ Pending | — | — | — |
-| **4. Read-Only Streaming** | `const __restrict__` (L1 cache) | `__constant__` cache | ⏳ Pending | — | — | — |
+| **1. Naive Global** (Baseline) | Direct DRAM reads | Global pointer | 1.193 ms | 450.0 GB/s | 2.813 TFLOPS | 28.9% |
+| **2. Constant Mask** | Direct DRAM reads | `__constant__` cache | 0.890 ms | 603.2 GB/s | 3.770 TFLOPS | 38.8% |
+| **3. Shared Apron** | Cooperative `__shared__` tile | `__constant__` cache | 1.097 ms | 489.2 GB/s | 3.058 TFLOPS | 31.5% |
+| **4. Read-Only Streaming** | `const __restrict__` (L1 cache) | `__constant__` cache | 0.804 ms | 667.8 GB/s | 4.174 TFLOPS | 42.9% |
 
 ### Key Architectural Takeaways:
 1. **Constant Memory Warp Broadcast Cuts Latency by 25%**:

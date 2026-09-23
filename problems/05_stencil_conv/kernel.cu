@@ -63,6 +63,20 @@ __global__ void conv2d_constant_mask_kernel(const float* in, float* out, int hei
 
     // TODO: Loop through neighborhood [-KERNEL_RADIUS, KERNEL_RADIUS],
     // fetch weights from `c_mask`, and accumulate sum.
+    float sum = 0.0f;
+    for (int kr = -KERNEL_RADIUS; kr <= KERNEL_RADIUS; ++kr) {
+        for (int kc = -KERNEL_RADIUS; kc <= KERNEL_RADIUS; ++kc) {
+            int in_r = r + kr;
+            int in_c = c + kc;
+            // Zero-padding boundary check
+            if (in_r >= 0 && in_r < height && in_c >= 0 && in_c < width) {
+                float pixel = in[in_r * width + in_c];
+                float weight = c_mask[(kr + KERNEL_RADIUS) * KERNEL_DIAMETER + (kc + KERNEL_RADIUS)];
+                sum += pixel * weight;
+            }
+        }
+    }
+    out[r * width + c] = sum;
 }
 
 void launch_conv2d_constant_mask(const float* d_in, const float* h_mask, float* d_out, int height, int width) {
@@ -72,11 +86,15 @@ void launch_conv2d_constant_mask(const float* d_in, const float* h_mask, float* 
     // 1. CUDA_CHECK(cudaMemcpyToSymbol(c_mask, h_mask, KERNEL_SIZE * sizeof(float)));
     // 2. Configure grid and block dimensions (e.g., dim3 block(16, 16))
     // 3. Launch conv2d_constant_mask_kernel<<<grid, block>>>(d_in, d_out, height, width);
+    CUDA_CHECK(cudaMemcpyToSymbol(c_mask, h_mask, KERNEL_SIZE * sizeof(float)));
+    dim3 block(16, 16);
+    dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
+    conv2d_constant_mask_kernel<<<grid, block>>>(d_in, d_out, height, width);
 }
 
 // Set to true once you implement Milestone 2!
 bool is_constant_mask_implemented() {
-    return false;
+    return true;
 }
 
 // ==============================================================================
@@ -99,12 +117,43 @@ bool is_constant_mask_implemented() {
 __global__ void conv2d_shared_tiled_kernel(const float* in, float* out, int height, int width) {
     // TODO: Allocate 2D shared memory apron
     // __shared__ float s_in[APRON_DIM][APRON_DIM];
-
     // TODO: Step 1: Cooperative Apron Loading with zero-padding
-
     // TODO: Step 2: __syncthreads();
-
     // TODO: Step 3: Compute convolution from shared memory and write output
+    
+    // Allocate shared memory
+    __shared__ float s_in[APRON_DIM][APRON_DIM];
+
+    // Global row and column
+    int c = blockIdx.x * blockDim.x + threadIdx.x;
+    int r = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Same reference corner for all threads in a block
+    int top_left_r = blockIdx.y * blockDim.y - KERNEL_RADIUS; 
+    int top_left_c = blockIdx.x * blockDim.x - KERNEL_RADIUS;
+    // Cooperative Apron loading
+    int tid = threadIdx.y * blockDim.x + threadIdx.x; // 0 .. 255
+    for (int idx = tid; idx < APRON_DIM * APRON_DIM; idx += blockDim.x * blockDim.y) {
+        int s_r = idx / APRON_DIM;
+        int s_c = idx % APRON_DIM;
+        int g_r = top_left_r + s_r;
+        int g_c = top_left_c + s_c;
+        s_in[s_r][s_c] = (g_r >= 0 && g_r < height && g_c >= 0 && g_c < width) ? in[g_r * width + g_c] : 0.0f;
+    }
+    __syncthreads();
+
+    if (r >= height || c >= width) return;
+
+    // Compute convolution from shared memory and write output
+    float sum = 0.0f;
+    for (int kr = -KERNEL_RADIUS; kr <= KERNEL_RADIUS; ++kr) {
+        for (int kc = -KERNEL_RADIUS; kc <= KERNEL_RADIUS; ++kc) {
+            float pixel = s_in[threadIdx.y + kr + KERNEL_RADIUS][threadIdx.x + kc + KERNEL_RADIUS];
+            float weight = c_mask[(kr + KERNEL_RADIUS) * KERNEL_DIAMETER + (kc + KERNEL_RADIUS)];
+            sum += pixel * weight;
+        }
+    }
+    out[r * width + c] = sum;
 }
 
 void launch_conv2d_shared_tiled(const float* d_in, const float* h_mask, float* d_out, int height, int width) {
@@ -115,11 +164,16 @@ void launch_conv2d_shared_tiled(const float* d_in, const float* h_mask, float* d
     // 2. dim3 block(TILE_DIM, TILE_DIM);
     // 3. dim3 grid((width + TILE_DIM - 1) / TILE_DIM, (height + TILE_DIM - 1) / TILE_DIM);
     // 4. conv2d_shared_tiled_kernel<<<grid, block>>>(d_in, d_out, height, width);
+    
+    CUDA_CHECK(cudaMemcpyToSymbol(c_mask, h_mask, KERNEL_SIZE * sizeof(float)));
+    dim3 block(16, 16);
+    dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
+    conv2d_shared_tiled_kernel<<<grid, block>>>(d_in, d_out, height, width);
 }
 
 // Set to true once you implement Milestone 3!
 bool is_shared_tiled_implemented() {
-    return false;
+    return true;
 }
 
 // ==============================================================================
@@ -137,15 +191,38 @@ __global__ void conv2d_readonly_cached_kernel(const float* __restrict__ in,
                                              float* __restrict__ out, 
                                              int height, int width) {
     // TODO: Implement read-only cached convolution kernel
+    int c = blockIdx.x * blockDim.x + threadIdx.x;
+    int r = blockIdx.y * blockDim.y + threadIdx.y;
+    const float* __restrict__ in_ptr = in; // Tag pointer as read-only, allowing hardware prefetching
+    if (r >= height || c >= width) return;
+    float sum = 0.0f;
+    for (int kr = -KERNEL_RADIUS; kr <= KERNEL_RADIUS; ++kr) {
+        #pragma unroll
+        for (int kc = -KERNEL_RADIUS; kc <= KERNEL_RADIUS; ++kc) {
+            int in_r = r + kr;
+            int in_c = c + kc;
+            // Zero-padding boundary check
+            if (in_r >= 0 && in_r < height && in_c >= 0 && in_c < width) {
+                float pixel = in_ptr[in_r * width + in_c];
+                float weight = c_mask[(kr + KERNEL_RADIUS) * KERNEL_DIAMETER + (kc + KERNEL_RADIUS)];
+                sum += pixel * weight;
+            }
+        }
+    }
+    out[r * width + c] = sum;
 }
 
 void launch_conv2d_readonly_cached(const float* d_in, const float* h_mask, float* d_out, int height, int width) {
     (void)d_in; (void)h_mask; (void)d_out; (void)height; (void)width;
 
     // TODO: Copy mask and launch conv2d_readonly_cached_kernel
+    CUDA_CHECK(cudaMemcpyToSymbol(c_mask, h_mask, KERNEL_SIZE * sizeof(float)));
+    dim3 block(16, 16);
+    dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
+    conv2d_readonly_cached_kernel<<<grid, block>>>(d_in, d_out, height, width);
 }
 
 // Set to true once you implement Milestone 4!
 bool is_readonly_cached_implemented() {
-    return false;
+    return true;
 }
