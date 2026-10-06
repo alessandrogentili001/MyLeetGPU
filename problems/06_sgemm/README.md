@@ -64,10 +64,10 @@ Benchmark size: $M=4096, N=4096, K=4096$ on Leonardo Booster NVIDIA A100-SXM4-64
 
 | Milestone | Strategy | Latency | Achieved Bandwidth | Compute Throughput | Peak FP32 % |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **1. Naive** | Direct DRAM | ⏳ Pending | — | — | — |
-| **2. Shared Tiled** | 32x32 `__shared__` | ⏳ Pending | — | — | — |
-| **3. 2D Reg Tiled** | 8x8 registers/thread | ⏳ Pending | — | — | — |
-| **4. cuBLAS** | Optimized Baseline | ⏳ Pending | — | — | — |
+| **1. Naive** | Direct DRAM | 42.92 ms | 4.69 GB/s | 3.20 TFLOPS | 16.4% |
+| **2. Shared Tiled** | 32x32 `__shared__` | 23.21 ms | 8.67 GB/s | 5.92 TFLOPS | 30.4% |
+| **3. 2D Reg Tiled** | 8x8 registers/thread | 8.85 ms | 22.74 GB/s | 15.53 TFLOPS | 79.7% |
+| **4. cuBLAS** | Optimized Baseline | 6.56 ms | 30.72 GB/s | 20.97 TFLOPS | 107.6% |
 
 
 ---
