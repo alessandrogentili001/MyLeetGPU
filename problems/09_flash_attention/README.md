@@ -92,9 +92,9 @@ Benchmark size: $N=4096, d=64$ (Causal Attention) on Leonardo Booster NVIDIA A10
 
 | Milestone | Strategy | Latency | Compute Throughput | Peak FP32 % |
 | :--- | :--- | :---: | :---: | :---: |
-| **1. Standard Attention** | Global Memory (DRAM) | ⏳ Pending | — | — |
-| **2. Tiled FlashAttention** | SRAM Tiling + Online Softmax | ⏳ Pending | — | — |
-| **3. FlashAttention-2** | Register Rescaling + Causal | ⏳ Pending | — | — |
+| **1. Standard Attention** | Global Memory (DRAM) | **42.48 ms** | 0.051 TFLOPS | 0.26% |
+| **2. Tiled FlashAttention** | SRAM Tiling + Online Softmax | **12.10 ms** | 0.177 TFLOPS | 0.91% |
+| **3. FlashAttention-2** | Register Rescaling + Causal | **4.51 ms** | 0.476 TFLOPS | 2.44% |
 
 ---
 

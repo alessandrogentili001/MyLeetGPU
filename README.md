@@ -95,4 +95,4 @@ Our code runs on Leonardo's custom SXM4 supercomputing partition:
 | **06** | [**SGEMM (Matrix Mult)**](problems/06_sgemm/) | Naive, Shared Memory Tiling, 2D Register Tiling, cuBLAS baseline | ✅ **Completed** | **15.53 TFLOPS** (79.7% FP32 Peak) |
 | **07** | [**Softmax**](problems/07_softmax/) | Two-pass vs Online Safe Softmax (FlashSoftmax), Warp reductions | ✅ **Completed** | **1,115 GB/s** (71.7% HBM2e Peak) |
 | **08** | [**LayerNorm / RMSNorm**](problems/08_layernorm_rmsnorm/) | Welford's algorithm, One-pass warp shuffles, Fused `float4` RMSNorm | ✅ **Completed** | **1,023.2 GB/s** (65.8% HBM2e Peak) |
-| **09** | [**FlashAttention-2**](problems/09_flash_attention/) | Tiling Q, K, V in SRAM, causal masking, online softmax rescaling | ⏳ In Progress | — |
+| **09** | [**FlashAttention-2**](problems/09_flash_attention/) | Tiling Q, K, V in SRAM, causal masking, online softmax rescaling | ✅ **Completed** | **4.51 ms / 0.48 TFLOPS** (9.4x vs DRAM Baseline) |
